@@ -54,10 +54,17 @@ canvas{display:block;width:100%;height:100%;image-rendering:pixelated;image-rend
 .card .st{color:var(--accent)}
 .card:disabled{opacity:.55;cursor:not-allowed}
 .card small{color:var(--muted);font-size:.9em}
-.wrap.fs,.wrap:fullscreen{max-width:none;margin:0;position:fixed;inset:0;z-index:50;background:var(--bg);padding:8px;box-sizing:border-box;grid-template-rows:minmax(0,1fr) auto auto;gap:8px}
-.wrap:fullscreen{position:static;height:100vh}
-.wrap.fs .screen,.wrap:fullscreen .screen{aspect-ratio:auto;height:100%;min-height:0}
+.wrap.fs,.wrap:fullscreen{max-width:none;margin:0;position:fixed;inset:0;z-index:50;background:#000;padding:0;display:block;width:100vw;height:100vh;height:100dvh}
+.wrap:fullscreen{position:static}
+.wrap.fs .screen,.wrap:fullscreen .screen{position:absolute;inset:0;width:100%;height:100%;aspect-ratio:auto;border:0;background:#000}
 .wrap.fs canvas,.wrap:fullscreen canvas{object-fit:contain}
+.wrap.fs .hint,.wrap:fullscreen .hint{display:none}
+.wrap.fs .bar,.wrap:fullscreen .bar{position:absolute;right:max(8px,env(safe-area-inset-right,0px));bottom:max(8px,env(safe-area-inset-bottom,0px));z-index:6;display:block}
+.wrap.fs .bar .mute,.wrap:fullscreen .bar .mute{background:rgba(20,22,26,.4);border-color:rgba(255,255,255,.22);color:rgba(255,255,255,.78);backdrop-filter:blur(2px)}
+.wrap.fs .pads,.wrap:fullscreen .pads{position:absolute;left:max(12px,env(safe-area-inset-left,0px));right:max(12px,env(safe-area-inset-right,0px));bottom:max(52px,calc(env(safe-area-inset-bottom,0px) + 44px));z-index:6;pointer-events:none;justify-content:flex-end}
+.wrap.fs .pads .grp,.wrap:fullscreen .pads .grp{justify-content:flex-end}
+.wrap.fs .pad,.wrap:fullscreen .pad{pointer-events:auto;background:rgba(20,22,26,.35);border-color:rgba(255,255,255,.25);color:rgba(255,255,255,.8)}
+.wrap.fs .pad.on,.wrap:fullscreen .pad.on{background:rgba(224,133,42,.6)}
 .opt:disabled{opacity:.45;cursor:not-allowed}
 .gold{color:#f2c94c}
 .shop{display:grid;gap:6px;width:min(600px,100%)}
@@ -898,10 +905,15 @@ function drawWheel() {
 
 // steer by dragging the wheel with mouse or finger
 const drag = { on: false, a0: 0, s0: 0 };
-const wheelAngle = (e) => { const r = cvs.getBoundingClientRect(); const d = CABIN.drag; return Math.atan2((e.clientY - r.top) / r.height * H - d[1], (e.clientX - r.left) / r.width * W - d[0]); };
+function cpt(e) {
+  const r = cvs.getBoundingClientRect(), fit = getComputedStyle(cvs).objectFit;
+  if (fit === 'contain') { const sc = Math.min(r.width / W, r.height / H), cw = W * sc, ch = H * sc; return [(e.clientX - r.left - (r.width - cw) / 2) / sc, (e.clientY - r.top - (r.height - ch) / 2) / sc]; }
+  return [(e.clientX - r.left) / r.width * W, (e.clientY - r.top) / r.height * H];
+}
+const wheelAngle = (e) => { const d = CABIN.drag, p = cpt(e); return Math.atan2(p[1] - d[1], p[0] - d[0]); };
 cvs.style.touchAction = 'none';
 cvs.addEventListener('pointerdown', (e) => {
-  const r = cvs.getBoundingClientRect(), d = CABIN.drag, x = (e.clientX - r.left) / r.width * W - d[0], y = (e.clientY - r.top) / r.height * H - d[1];
+  const d = CABIN.drag, p = cpt(e), x = p[0] - d[0], y = p[1] - d[1];
   if (Math.hypot(x, y) > d[2] + 6) return;
   drag.on = true; drag.a0 = wheelAngle(e); drag.s0 = S.steer; cvs.setPointerCapture(e.pointerId); audioStart(); e.preventDefault();
 });
@@ -1001,14 +1013,21 @@ document.getElementById('ovTitle').addEventListener('click', () => {
   if (tapN >= 7) { tapN = 0; SAVE.secret = true; saveGame(); selectCar('gtr'); document.getElementById('info').textContent = 'СЕКРЕТНА МАШИНА ВІДКРИТА: Nissan GT-R. Вона є в гаражі.'; setMsg('SECRET CAR!', 2); }
 });
 const wrapEl = document.querySelector('.wrap');
+function fitCanvas() {
+  const fs = wrapEl.classList.contains('fs') || document.fullscreenElement;
+  if (!fs) { cvs.style.objectFit = ''; return; }
+  const a = innerWidth / innerHeight;
+  cvs.style.objectFit = (a > 1.4 && a < 1.95) ? 'fill' : 'contain';
+}
+addEventListener('resize', fitCanvas); addEventListener('orientationchange', () => setTimeout(fitCanvas, 200));
 function toggleFs() {
   const on = wrapEl.classList.contains('fs') || document.fullscreenElement;
-  if (on) { wrapEl.classList.remove('fs'); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); return; }
-  wrapEl.classList.add('fs');
+  if (on) { wrapEl.classList.remove('fs'); if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); fitCanvas(); return; }
+  wrapEl.classList.add('fs'); fitCanvas();
   try { const r = wrapEl.requestFullscreen && wrapEl.requestFullscreen(); if (r && r.catch) r.catch(() => {}); } catch (e) { /* fallback: fixed layout */ }
 }
 document.getElementById('fsBtn').addEventListener('click', toggleFs);
-document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) wrapEl.classList.remove('fs'); });
+document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement) wrapEl.classList.remove('fs'); setTimeout(fitCanvas, 50); });
 addEventListener('keydown', (e) => { if ((e.key === 'f' || e.key === 'F') && S.mode !== 'x') toggleFs(); });
 let shopTab = 'up';
 function renderShop() {
